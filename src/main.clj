@@ -56,7 +56,7 @@
     (drop! db-spec table-key))
   db-spec)
 
-(def input (chan 10))
+(def event-queue (chan 10))
 
 (def db-spec {:subprotocol "sqlite"
               :classname "org.sqlite.JDBC"
@@ -67,7 +67,7 @@
   (drop-if-exists! db-spec :links)
   (jdbc/db-do-commands
    db-spec
-   (jdbc/create-table-ddl :links [[:code :text "not null" "primary key"]
+   (jdbc/create-table-ddl :links [[:code :text "not null"]
                                   [:link :text]])))
 
 (defn encode62 [n]
@@ -103,18 +103,23 @@
                       :body [:a {:href (str "/" link)} link]})
 
       true (fn [{:keys [uri] :as request}]
-             (redirect
-              (-> (jdbc/query db-spec
-                              ["select link from links where code = ?"
-                               (-> uri rest clojure.string/join)])
-                  first
-                  :link
-                  (or "/"))
-              303))}
+             (let [out (chan)]
+               (>!! event-queue {:type :require
+                                 :code (-> uri rest clojure.string/join)
+                                 :out out})
+               (redirect (<!! out) 303))
+             #_(redirect
+                (-> (jdbc/query db-spec
+                                ["select link from links where code = ?"
+                                 (-> uri rest clojure.string/join)])
+                    first
+                    :link
+                    (or "/"))
+                303))}
 
      :post
      {"" (fn [{{:strs [^String link]} :params}]
-           (>!! input link)
+           (>!! event-queue {:type :insert :link link})
            (redirect (str "/c/" (encode62-str link)) 303))}}
 
     true
@@ -142,10 +147,24 @@
 
 (def consumer
   (go-loop []
-    (let [link (<! input)]
-      (println "saving" link)
-      ;; (swap! db assoc (encode62-str link) link)
-      (jdbc/insert! db-spec :links {:code (encode62-str link) :link link}))
+    (let [event (<! event-queue)]
+      (condp = (:type event)
+        :insert
+        (let [{:keys [link]} event]
+          (pprint event)
+          (println "saving" link)
+          (jdbc/insert! db-spec :links {:code (encode62-str link) :link link}))
+
+        :require
+        (let [{:keys [code out]} event]
+          (println "requiring")
+          (>!! out (-> (jdbc/query
+                        db-spec
+                        ["select link from links where code = ?" code])
+                       first
+                       :link
+                       (or "/"))))))
+
     (recur)))
 
 (defn server-restart! []
