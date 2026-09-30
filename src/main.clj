@@ -6,6 +6,7 @@
    [ring.adapter.jetty :refer [run-jetty]]
    [ring.middleware.reload :refer [wrap-reload]]
    [hiccup.middleware :refer [wrap-base-url]]
+   [hiccup.page :as page]
    [hiccup.form :as form]
    [hiccup2.core :as hiccup2]
    [hiccup.core :as hiccup]
@@ -134,7 +135,10 @@
       (pipe
          (fn [handler request]
            (-> (handler request)
-               (update :body #(str (hiccup2/html %)))
+               (update :body #(str
+                               (page/html5
+                                   (page/include-css "https://cdn.jsdelivr.net/npm/holiday.css@0.11.6")
+                                   %)))
                (update :headers (partial merge {"Content-Type" "text/html"}))))
          #_(fn [handler request]
              (let [respose (handler request)]
