@@ -1,0 +1,13 @@
+;; reload deps using shell = `clj -P`
+{:paths ["src" "target/classes"]
+ :deps {org.clojure/clojure {:mvn/version "1.12.6"}
+        ring/ring-core {:mvn/version "1.12.1"}
+        ring/ring-jetty-adapter {:mvn/version "1.12.1"}
+        ring/ring-defaults {:mvn/version "0.5.0"}
+        ring/ring-devel {:mvn/version "1.12.1"}
+        org.slf4j/slf4j-simple {:mvn/version "2.0.13"}
+        hiccup/hiccup {:mvn/version "2.0.0"}
+        bidi/bidi {:mvn/version "2.1.6"}
+        ;; com.clojure-goes-fast/clj-java-decompiler {:mvn/version "0.3.7"}
+        }
+ :aliases {:run {:main-opts ["-m" "main"]}}}
