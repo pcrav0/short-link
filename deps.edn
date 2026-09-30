@@ -1,6 +1,7 @@
 ;; reload deps using shell = `clj -P`
 {:paths ["src" "target/classes"]
  :deps {org.clojure/clojure {:mvn/version "1.12.6"}
+        org.clojure/core.async {:mvn/version "1.9.865"}
         ring/ring-core {:mvn/version "1.12.1"}
         ring/ring-jetty-adapter {:mvn/version "1.12.1"}
         ring/ring-defaults {:mvn/version "0.5.0"}
