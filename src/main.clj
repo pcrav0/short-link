@@ -2,23 +2,73 @@
   (:gen-class)
   (:require
    ;; [clj-java-decompiler.core :refer [decompile]]
-   [clojure.pprint :refer [pprint pprint-newline]]
+   [clojure.pprint :refer [pprint]]
    [ring.adapter.jetty :refer [run-jetty]]
    [ring.middleware.reload :refer [wrap-reload]]
-   [ring.middleware.params :refer [assoc-form-params]]
    [hiccup.middleware :refer [wrap-base-url]]
    [hiccup.form :as form]
    [hiccup2.core :as hiccup2]
    [hiccup.core :as hiccup]
    [bidi.ring :refer [make-handler]]
-   [clojure.core.async :refer [chan <!! >!! <! go-loop]]))
+   [ring.util.response :refer [redirect]]
+   [ring.middleware.params :refer [wrap-params]]
+   [clojure.core.async :refer [chan <!! >!! <! go-loop]]
+   [clojure.java.jdbc :as jdbc]
+   [clojure.string :refer [lower-case]]))
 
 (defn pipe [init & fs]
   (reduce (fn [acc f] (partial f acc)) init fs))
 
+(defn sqlize
+  "Convert string/symbol/keyword to string with dashes replaced by underscores."
+  [s]
+  (when s
+    (-> ^String (if (or (symbol? s) (keyword? s))
+                  (name s)
+                  (str s))
+        (.replace "-" "_")
+        (lower-case))))
+
+(defn drop!
+  "Drop a given table."
+  [db-spec table-key]
+  (->> (jdbc/drop-table-ddl (sqlize table-key))
+       (vector)
+       (jdbc/execute! db-spec))
+  db-spec)
+
+(defn exists?
+  "Check whether a given table exists."
+  [db-spec table-key]
+  (try
+    (do
+      (->> (format "select 1 from %s" (sqlize table-key))
+           (vector)
+           (jdbc/query db-spec))
+      true)
+    (catch Throwable ex
+      false)))
+
+(defn drop-if-exists!
+  "Drop table if it exists."
+  [db-spec table-key]
+  (when (exists? db-spec table-key)
+    (drop! db-spec table-key))
+  db-spec)
+
 (def input (chan 10))
 
-(def db (atom {}))
+(def db-spec {:subprotocol "sqlite"
+              :classname "org.sqlite.JDBC"
+              :subname "here.sql"})
+
+(defn start-db! []
+  (Class/forName "org.sqlite.JDBC")
+  (drop-if-exists! db-spec :links)
+  (jdbc/db-do-commands
+   db-spec
+   (jdbc/create-table-ddl :links [[:code :text "not null" "primary key"]
+                                  [:link :text]])))
 
 (defn encode62 [n]
   (if (zero? n)
@@ -53,14 +103,19 @@
                       :body [:a {:href (str "/" link)} link]})
 
       true (fn [{:keys [uri] :as request}]
-             (ring.util.response/redirect
-              (get @db (-> uri rest clojure.string/join) "/")
+             (redirect
+              (-> (jdbc/query db-spec
+                              ["select link from links where code = ?"
+                               (-> uri rest clojure.string/join)])
+                  first
+                  :link
+                  (or "/"))
               303))}
 
      :post
      {"" (fn [{{:strs [^String link]} :params}]
            (>!! input link)
-           (ring.util.response/redirect (str "/c/" (encode62-str link)) 303))}}
+           (redirect (str "/c/" (encode62-str link)) 303))}}
 
     true
     (fn [request]
@@ -68,7 +123,7 @@
 
 (def app
   (-> routes
-      (make-handler ring.middleware.params/wrap-params)
+      (make-handler wrap-params)
       wrap-base-url
       wrap-reload
       (pipe
@@ -89,7 +144,8 @@
   (go-loop []
     (let [link (<! input)]
       (println "saving" link)
-      (swap! db assoc (encode62-str link) link))
+      ;; (swap! db assoc (encode62-str link) link)
+      (jdbc/insert! db-spec :links {:code (encode62-str link) :link link}))
     (recur)))
 
 (defn server-restart! []
