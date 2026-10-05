@@ -1,4 +1,5 @@
 ;; reload deps using shell = `clj -P`
+;; main = clj -M:run
 {:paths ["src" "target/classes"]
  :deps {org.clojure/clojure {:mvn/version "1.12.6"}
         org.clojure/core.async {:mvn/version "1.9.865"}
@@ -10,7 +11,5 @@
         hiccup/hiccup {:mvn/version "2.0.0"}
         bidi/bidi {:mvn/version "2.1.6"}
         org.xerial/sqlite-jdbc {:mvn/version "3.20.0"}
-        org.clojure/java.jdbc {:mvn/version "0.7.0"}
-        ;; com.clojure-goes-fast/clj-java-decompiler {:mvn/version "0.3.7"}
-        }
+        org.clojure/java.jdbc {:mvn/version "0.7.0"}}
  :aliases {:run {:main-opts ["-m" "main"]}}}
